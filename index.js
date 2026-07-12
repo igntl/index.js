@@ -15,15 +15,14 @@ const client = new Client({
 });
 
 // ==================== [ الإعدادات ] ====================
-const VOICE_CHANNEL_ID = '1483220557796479098'; // تم تحديث آيدي الروم الخاص بك
-const PREFIX = '!'; // بريفكس أوامر الأغاني (مثال: !play)
+const VOICE_CHANNEL_ID = '1483220557796479098'; // آيدي الروم الخاص بك
+const PREFIX = '!'; // بريفكس أوامر الأغاني
 // =======================================================
 
-// إعداد مشغل الموسيقى (DisTube)
+// إعداد مشغل الموسيقى المتوافق مع DisTube v5
 const distube = new DisTube(client, {
-    leaveOnStop: false,
     leaveOnEmpty: false,
-    leaveOnFinish: false, // لضمان عدم خروج البوت من الروم الصوتي أبداً
+    leaveOnFinish: false, // لضمان عدم خروج البوت من الروم عند انتهاء الأغاني
     plugins: [
         new YouTubePlugin(),
         new SpotifyPlugin(),
@@ -34,7 +33,7 @@ const distube = new DisTube(client, {
 client.once('ready', async () => {
     console.log(`🎵 Bot is ready as ${client.user.tag}!`);
     
-    // البقاء في الروم الصوتي 24/7 عند تشغيل البوت
+    // الدخول والثبات في الروم الصوتي فور تشغيل البوت
     connectToVoice();
 });
 
@@ -44,12 +43,10 @@ async function connectToVoice() {
         const channel = await client.channels.fetch(VOICE_CHANNEL_ID);
         if (!channel) return console.error("لم يتم العثور على الروم الصوتي.");
 
-        // الدخول إلى الروم باستخدام DisTube وضمان ثباته
         await distube.voices.join(channel);
         console.log(`✅ Connected and staying in: ${channel.name}`);
     } catch (error) {
         console.error("خطأ أثناء الاتصال بالروم الصوتي:", error);
-        // إعادة المحاولة بعد 5 ثوانٍ في حال فشل الاتصال المفاجئ
         setTimeout(() => connectToVoice(), 5000);
     }
 }
@@ -58,7 +55,6 @@ async function connectToVoice() {
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
-    // تم تصحيح هذا السطر لمنع كراش الـ SyntaxError العشوائي
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
@@ -73,7 +69,6 @@ client.on('messageCreate', async (message) => {
         await message.reply(`🔍 جاري البحث والتشغيل: **${query}**...`);
         
         try {
-            // تشغيل الأغنية في الروم الصوتي المتواجد فيه المستخدم
             await distube.play(voiceChannel, query, {
                 message,
                 textChannel: message.channel
@@ -97,26 +92,26 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // 3. أمر إيقاف الموسيقى مؤقتاً (!stop)
+    // 3. أمر إيقاف الموسيقى (!stop)
     if (command === 'stop') {
         const queue = distube.getQueue(message);
         if (!queue) return message.reply('❌ لا توجد موسيقى تعمل حالياً.');
         
         await distube.stop(message);
-        message.reply('⏹️ تم إيقاف التشغيل وتصفير قائمة الانتظار (البوت سيبقى في الروم).');
+        message.reply('⏹️ تم إيقاف التشغيل وتصفير القائمة (البوت سيبقى ثابت في الروم).');
     }
 
-    // 4. أمر معرفة الأغنية الحالية (!nowplaying أو !np)
+    // 4. أمر معرفة الأغنية الحالية (!np)
     if (command === 'np' || command === 'nowplaying') {
         const queue = distube.getQueue(message);
-        if (!queue) return message.reply('❌ لا يوجد شيء يعمل حالياً.');
+        if (!queue || !queue.songs.length) return message.reply('❌ لا يوجد شيء يعمل حالياً.');
         
         const song = queue.songs[0];
         message.reply(`🎶 تعمل حالياً: **${song.name}** - \`${song.formattedDuration}\`\nطلب بواسطة: ${song.user}`);
     }
 });
 
-// أحداث مشغل الموسيقى لإرسال رسائل تفاعلية عند تشغيل الأغاني
+// أحداث مشغل الموسيقى للرسائل التفاعلية
 distube.on('playSong', (queue, song) => {
     const embed = new EmbedBuilder()
         .setTitle('🎶 جاري تشغيل الأغنية الآن')
@@ -131,7 +126,7 @@ distube.on('playSong', (queue, song) => {
     queue.textChannel.send({ embeds: [embed] });
 });
 
-// حماية إضافية: إذا خرج البوت بالخطأ أو طُرد، يعود تلقائياً
+// حماية حلقة الاتصال: يعود فوراً إذا تم طرده
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member.id === client.user.id && !newState.channelId) {
         console.log("⚠️ تم إخراج البوت من الروم الصوتي! جاري العودة...");
