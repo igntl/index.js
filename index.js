@@ -16,13 +16,11 @@ const client = new Client({
 
 // ==================== [ الإعدادات ] ====================
 const VOICE_CHANNEL_ID = '1483220557796479098'; // آيدي الروم الخاص بك
-const PREFIX = '!'; // بريفكس أوامر الأغاني
+const PREFIX = '!'; 
 // =======================================================
 
-// إعداد مشغل الموسيقى المتوافق مع DisTube v5
+// إعداد الكائن نظيف تماماً بدون أي مفاتيح تسبب تعارض في الإصدارات الجديدة
 const distube = new DisTube(client, {
-    leaveOnEmpty: false,
-    leaveOnFinish: false, // لضمان عدم خروج البوت من الروم عند انتهاء الأغاني
     plugins: [
         new YouTubePlugin(),
         new SpotifyPlugin(),
@@ -43,6 +41,7 @@ async function connectToVoice() {
         const channel = await client.channels.fetch(VOICE_CHANNEL_ID);
         if (!channel) return console.error("لم يتم العثور على الروم الصوتي.");
 
+        // الاتصال المباشر عبر الـ Voice Manager الخاص بـ DisTube
         await distube.voices.join(channel);
         console.log(`✅ Connected and staying in: ${channel.name}`);
     } catch (error) {
@@ -98,7 +97,7 @@ client.on('messageCreate', async (message) => {
         if (!queue) return message.reply('❌ لا توجد موسيقى تعمل حالياً.');
         
         await distube.stop(message);
-        message.reply('⏹️ تم إيقاف التشغيل وتصفير القائمة (البوت سيبقى ثابت في الروم).');
+        message.reply('⏹️ تم إيقاف التشغيل وتصفير القائمة.');
     }
 
     // 4. أمر معرفة الأغنية الحالية (!np)
@@ -107,11 +106,11 @@ client.on('messageCreate', async (message) => {
         if (!queue || !queue.songs.length) return message.reply('❌ لا يوجد شيء يعمل حالياً.');
         
         const song = queue.songs[0];
-        message.reply(`🎶 تعمل حالياً: **${song.name}** - \`${song.formattedDuration}\`\nطلب بواسطة: ${song.user}`);
+        message.reply(`🎶 تعمل حالياً: **${song.name}** - \`${song.formattedDuration}\``);
     }
 });
 
-// أحداث مشغل الموسيقى للرسائل التفاعلية
+// أحداث مشغل الموسيقى
 distube.on('playSong', (queue, song) => {
     const embed = new EmbedBuilder()
         .setTitle('🎶 جاري تشغيل الأغنية الآن')
@@ -126,10 +125,10 @@ distube.on('playSong', (queue, song) => {
     queue.textChannel.send({ embeds: [embed] });
 });
 
-// حماية حلقة الاتصال: يعود فوراً إذا تم طرده
+// حماية البوت 24/7 ضد الطرد أو الخروج المفاجئ
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member.id === client.user.id && !newState.channelId) {
-        console.log("⚠️ تم إخراج البوت من الروم الصوتي! جاري العودة...");
+        console.log("⚠️ تم خروج البوت من الروم! جاري إعادته للثبات...");
         setTimeout(() => connectToVoice(), 3000);
     }
 });
