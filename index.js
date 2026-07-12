@@ -34,14 +34,11 @@ const distube = new DisTube(client, {
     ]
 });
 
-// تغيير اسم الحدث لتفادي تحذير الـ DeprecationWarning
 client.once('clientReady', async () => {
     console.log(`🎵 Bot is ready as ${client.user.tag}!`);
-    // تأخير الدخول التلقائي لمدة 3 ثوانٍ حتى يستقر اتصال البوت بالديسكورد تماماً
     setTimeout(() => connectToVoice(), 3000);
 });
 
-// دالة اتصال مستقرة تعتمد على مكتبة ديسكورد الرسمية مباشرة
 async function connectToVoice() {
     try {
         const channel = await client.channels.fetch(VOICE_CHANNEL_ID);
@@ -54,6 +51,9 @@ async function connectToVoice() {
             selfMute: false,
             selfDeaf: true
         });
+
+        // سطر الحل: إجبار DisTube على تبني هذا الاتصال لمنع التعارض
+        distube.voices.add(channel.guild.id, connection);
 
         connection.on(VoiceConnectionStatus.Disconnected, () => {
             console.log("⚠️ تم قطع الاتصال بالروم، جاري إعادة المحاولة...");
@@ -88,10 +88,10 @@ client.on('messageCreate', async (message) => {
                 textChannel: message.channel,
                 member: message.member
             });
-            await replyMessage.delete().catch(() => {}); // حذف رسالة البحث بعد التشغيل بنجاح
+            await replyMessage.delete().catch(() => {});
         } catch (error) {
             console.error("DISTUBE PLAY ERROR:", error);
-            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية. تأكد من جودة الرابط أو المحاولة مجدداً.');
+            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية.');
         }
     }
 
@@ -139,7 +139,6 @@ distube.on('error', (channel, e) => {
     console.error("DisTube Global Error:", e);
 });
 
-// منع التعارض عند تحديث حالة الصوت
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member.id === client.user.id && !newState.channelId) {
         console.log("⚠️ تم خروج البوت من الروم! جاري إعادته للثبات...");
