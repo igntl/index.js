@@ -3,8 +3,7 @@ const { DisTube } = require('distube');
 const { YouTubePlugin } = require('@distube/youtube');
 const { SpotifyPlugin } = require('@distube/spotify');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
-const { joinVoiceChannel, VoiceConnectionStatus } = require('@discordjs/voice');
-const ffmpegStatic = require('ffmpeg-static'); // استدعاء المسار الثابت للمكتبة المرفقة بالمشروع
+const ffmpegStatic = require('ffmpeg-static');
 require('dotenv').config();
 
 const client = new Client({
@@ -21,10 +20,9 @@ const VOICE_CHANNEL_ID = '1483220557796479098';
 const PREFIX = '!'; 
 // =======================================================
 
-// إعداد ديس تيوب وتمرير المسار التنفيذي الثابت والمباشر للمكتبة داخل المشروع
 const distube = new DisTube(client, {
     ffmpeg: {
-        path: ffmpegStatic // الحل النهائي: تمرير المسار البرمجي المباشر للحزمة الثابتة
+        path: ffmpegStatic // حل مشكلة الـ FFMPEG
     },
     plugins: [
         new YouTubePlugin({ 
@@ -44,27 +42,15 @@ client.once('clientReady', async () => {
     setTimeout(() => connectToVoice(), 3000);
 });
 
+// دالة الاتصال المباشرة والصحيحة عبر DisTube لمنع تضارب كائن الـ Voice
 async function connectToVoice() {
     try {
         const channel = await client.channels.fetch(VOICE_CHANNEL_ID);
         if (!channel) return console.error("لم يتم العثور على الروم الصوتي.");
 
-        const connection = joinVoiceChannel({
-            channelId: channel.id,
-            guildId: channel.guild.id,
-            adapterCreator: channel.guild.voiceAdapterCreator,
-            selfMute: false,
-            selfDeaf: true
-        });
-
-        distube.voices.add(channel.guild.id, connection);
-
-        connection.on(VoiceConnectionStatus.Disconnected, () => {
-            console.log("⚠️ تم قطع الاتصال بالروم، جاري إعادة المحاولة...");
-            setTimeout(() => connectToVoice(), 5000);
-        });
-
-        console.log(`✅ Connected and stable in: ${channel.name}`);
+        // جعل ديس تيوب يدخل بنفسه ليتعرف على الروم كملك له
+        await distube.voices.join(channel);
+        console.log(`✅ Connected and stable via DisTube in: ${channel.name}`);
     } catch (error) {
         console.error("خطأ أثناء الاتصال بالروم الصوتي:", error);
         setTimeout(() => connectToVoice(), 5000);
