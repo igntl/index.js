@@ -23,8 +23,6 @@ const distube = new DisTube(client, {
     ffmpeg: {
         path: ffmpegStatic
     },
-    leaveOnEmpty: false,
-    leaveOnFinish: false,
     plugins: [
         new YouTubePlugin({ 
             ytdlOptions: {
@@ -58,7 +56,6 @@ client.on('messageCreate', async (message) => {
         const replyMessage = await message.reply(`🔍 جاري البحث والتشغيل: **${query}**...`);
         
         try {
-            // ديس تيوب سيتولى الدخول لأول مرة وتأسيس الاتصال بناءً على مكانك الحالي
             await distube.play(voiceChannel, query, {
                 message: message,
                 textChannel: message.channel,
@@ -67,7 +64,7 @@ client.on('messageCreate', async (message) => {
             await replyMessage.delete().catch(() => {});
         } catch (error) {
             console.error("DISTUBE PLAY ERROR:", error);
-            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية. تأكد من استقرار اتصال الروم.');
+            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية.');
         }
     }
 
