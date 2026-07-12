@@ -15,7 +15,7 @@ const client = new Client({
 });
 
 // ==================== [ الإعدادات ] ====================
-const VOICE_CHANNEL_ID = '1483220557796479098'; // آيدي الروم الثابت 24/7
+const VOICE_CHANNEL_ID = '1483220557796479098'; // تم تحديث آيدي الروم الخاص بك
 const PREFIX = '!'; // بريفكس أوامر الأغاني (مثال: !play)
 // =======================================================
 
@@ -58,7 +58,8 @@ async function connectToVoice() {
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
-    const args = message.content.slice(PREFIX.length).trim().split(/+/);
+    // تم تصحيح هذا السطر لمنع كراش الـ SyntaxError العشوائي
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
     // 1. أمر التشغيل (!play أو !p)
