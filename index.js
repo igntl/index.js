@@ -4,6 +4,7 @@ const { YouTubePlugin } = require('@distube/youtube');
 const { SpotifyPlugin } = require('@distube/spotify');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
 const { joinVoiceChannel, VoiceConnectionStatus } = require('@discordjs/voice');
+const ffmpegStatic = require('ffmpeg-static'); // استدعاء المسار الثابت للمكتبة المرفقة بالمشروع
 require('dotenv').config();
 
 const client = new Client({
@@ -20,10 +21,10 @@ const VOICE_CHANNEL_ID = '1483220557796479098';
 const PREFIX = '!'; 
 // =======================================================
 
-// إعداد ديس تيوب والإشارة إلى ffmpeg المثبت عبر نظام Railway مباشرة
+// إعداد ديس تيوب وتمرير المسار التنفيذي الثابت والمباشر للمكتبة داخل المشروع
 const distube = new DisTube(client, {
     ffmpeg: {
-        path: 'ffmpeg' // يقرأ الحزمة المضافة في متغيرات NIXPACKS مباشرة
+        path: ffmpegStatic // الحل النهائي: تمرير المسار البرمجي المباشر للحزمة الثابتة
     },
     plugins: [
         new YouTubePlugin({ 
