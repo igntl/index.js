@@ -16,11 +16,15 @@ const client = new Client({
 });
 
 // ==================== [ الإعدادات ] ====================
-const VOICE_CHANNEL_ID = '1483220557796479098'; // آيدي الروم الخاص بك
+const VOICE_CHANNEL_ID = '1483220557796479098'; 
 const PREFIX = '!'; 
 // =======================================================
 
+// إعداد ديس تيوب والإشارة إلى ffmpeg المثبت عبر نظام Railway مباشرة
 const distube = new DisTube(client, {
+    ffmpeg: {
+        path: 'ffmpeg' // يقرأ الحزمة المضافة في متغيرات NIXPACKS مباشرة
+    },
     plugins: [
         new YouTubePlugin({ 
             ytdlOptions: {
@@ -52,7 +56,6 @@ async function connectToVoice() {
             selfDeaf: true
         });
 
-        // سطر الحل: إجبار DisTube على تبني هذا الاتصال لمنع التعارض
         distube.voices.add(channel.guild.id, connection);
 
         connection.on(VoiceConnectionStatus.Disconnected, () => {
