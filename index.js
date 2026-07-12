@@ -16,14 +16,15 @@ const client = new Client({
 });
 
 // ==================== [ الإعدادات ] ====================
-const VOICE_CHANNEL_ID = '1483220557796479098'; 
 const PREFIX = '!'; 
 // =======================================================
 
 const distube = new DisTube(client, {
     ffmpeg: {
-        path: ffmpegStatic // حل مشكلة الـ FFMPEG
+        path: ffmpegStatic
     },
+    leaveOnEmpty: false,
+    leaveOnFinish: false,
     plugins: [
         new YouTubePlugin({ 
             ytdlOptions: {
@@ -39,23 +40,7 @@ const distube = new DisTube(client, {
 
 client.once('clientReady', async () => {
     console.log(`🎵 Bot is ready as ${client.user.tag}!`);
-    setTimeout(() => connectToVoice(), 3000);
 });
-
-// دالة الاتصال المباشرة والصحيحة عبر DisTube لمنع تضارب كائن الـ Voice
-async function connectToVoice() {
-    try {
-        const channel = await client.channels.fetch(VOICE_CHANNEL_ID);
-        if (!channel) return console.error("لم يتم العثور على الروم الصوتي.");
-
-        // جعل ديس تيوب يدخل بنفسه ليتعرف على الروم كملك له
-        await distube.voices.join(channel);
-        console.log(`✅ Connected and stable via DisTube in: ${channel.name}`);
-    } catch (error) {
-        console.error("خطأ أثناء الاتصال بالروم الصوتي:", error);
-        setTimeout(() => connectToVoice(), 5000);
-    }
-}
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
@@ -73,6 +58,7 @@ client.on('messageCreate', async (message) => {
         const replyMessage = await message.reply(`🔍 جاري البحث والتشغيل: **${query}**...`);
         
         try {
+            // ديس تيوب سيتولى الدخول لأول مرة وتأسيس الاتصال بناءً على مكانك الحالي
             await distube.play(voiceChannel, query, {
                 message: message,
                 textChannel: message.channel,
@@ -81,7 +67,7 @@ client.on('messageCreate', async (message) => {
             await replyMessage.delete().catch(() => {});
         } catch (error) {
             console.error("DISTUBE PLAY ERROR:", error);
-            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية.');
+            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية. تأكد من استقرار اتصال الروم.');
         }
     }
 
@@ -127,13 +113,6 @@ distube.on('playSong', (queue, song) => {
 
 distube.on('error', (channel, e) => {
     console.error("DisTube Global Error:", e);
-});
-
-client.on('voiceStateUpdate', (oldState, newState) => {
-    if (oldState.member.id === client.user.id && !newState.channelId) {
-        console.log("⚠️ تم خروج البوت من الروم! جاري إعادته للثبات...");
-        setTimeout(() => connectToVoice(), 5000);
-    }
 });
 
 client.login(process.env.DISCORD_TOKEN);
