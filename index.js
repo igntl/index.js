@@ -3,6 +3,7 @@ const { DisTube } = require('distube');
 const { YouTubePlugin } = require('@distube/youtube');
 const { SpotifyPlugin } = require('@distube/spotify');
 const { SoundCloudPlugin } = require('@distube/soundcloud');
+const { joinVoiceChannel, VoiceConnectionStatus } = require('@discordjs/voice');
 require('dotenv').config();
 
 const client = new Client({
@@ -33,18 +34,33 @@ const distube = new DisTube(client, {
     ]
 });
 
-client.once('ready', async () => {
+// تغيير اسم الحدث لتفادي تحذير الـ DeprecationWarning
+client.once('clientReady', async () => {
     console.log(`🎵 Bot is ready as ${client.user.tag}!`);
-    connectToVoice();
+    // تأخير الدخول التلقائي لمدة 3 ثوانٍ حتى يستقر اتصال البوت بالديسكورد تماماً
+    setTimeout(() => connectToVoice(), 3000);
 });
 
+// دالة اتصال مستقرة تعتمد على مكتبة ديسكورد الرسمية مباشرة
 async function connectToVoice() {
     try {
         const channel = await client.channels.fetch(VOICE_CHANNEL_ID);
         if (!channel) return console.error("لم يتم العثور على الروم الصوتي.");
 
-        await distube.voices.join(channel);
-        console.log(`✅ Connected and staying in: ${channel.name}`);
+        const connection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId: channel.guild.id,
+            adapterCreator: channel.guild.voiceAdapterCreator,
+            selfMute: false,
+            selfDeaf: true
+        });
+
+        connection.on(VoiceConnectionStatus.Disconnected, () => {
+            console.log("⚠️ تم قطع الاتصال بالروم، جاري إعادة المحاولة...");
+            setTimeout(() => connectToVoice(), 5000);
+        });
+
+        console.log(`✅ Connected and stable in: ${channel.name}`);
     } catch (error) {
         console.error("خطأ أثناء الاتصال بالروم الصوتي:", error);
         setTimeout(() => connectToVoice(), 5000);
@@ -62,20 +78,20 @@ client.on('messageCreate', async (message) => {
         if (!query) return message.reply('❌ يرجى كتابة اسم الأغنية أو الرابط!');
 
         const voiceChannel = message.member.voice.channel;
-        if (!voiceChannel) return message.reply('❌ يجب أن تكون في روم صوتی أولاً!');
+        if (!voiceChannel) return message.reply('❌ يجب أن تكون في روم صوتي أولاً!');
 
         const replyMessage = await message.reply(`🔍 جاري البحث والتشغيل: **${query}**...`);
         
         try {
-            // تشغيل الصوت مع تمرير الروم الصوتي الحالي للمستخدم بدقة
             await distube.play(voiceChannel, query, {
                 message: message,
                 textChannel: message.channel,
                 member: message.member
             });
+            await replyMessage.delete().catch(() => {}); // حذف رسالة البحث بعد التشغيل بنجاح
         } catch (error) {
-            console.error("DISTUBE PLAY ERROR:", error); // سيطبع تفاصيل الخطأ في لوق Railway إذا حدث
-            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية. يرجى مراجعة اللوق لمزيد من التفاصيل.');
+            console.error("DISTUBE PLAY ERROR:", error);
+            await replyMessage.edit('❌ حدث خطأ أثناء محاولة تشغيل الأغنية. تأكد من جودة الرابط أو المحاولة مجدداً.');
         }
     }
 
@@ -123,10 +139,11 @@ distube.on('error', (channel, e) => {
     console.error("DisTube Global Error:", e);
 });
 
+// منع التعارض عند تحديث حالة الصوت
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member.id === client.user.id && !newState.channelId) {
         console.log("⚠️ تم خروج البوت من الروم! جاري إعادته للثبات...");
-        setTimeout(() => connectToVoice(), 3000);
+        setTimeout(() => connectToVoice(), 5000);
     }
 });
 
