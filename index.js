@@ -18,7 +18,6 @@ const PREFIX = '!'; // أمر تشغيل البوت
 const EXCLUDE_KEYWORDS = ['ها هو', 'ها هو', 'مبروك', 'فاز', 'الفائز', 'تهنئة', 'المركز', 'كفو'];
 const MAX_LETTER_LIMIT = 70; // طول الرسالة التي تعتبر إعلان أو تهنئة وليس ترشيح مجرد
 
-// تحديث اسم الحدث لتفادي الـ Warning
 client.once('clientReady', () => {
     console.log(`تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
 });
@@ -31,18 +30,16 @@ client.on('messageCreate', async (message) => {
 
     if (command === 'sort') {
         if (!message.member.permissions.has('ManageMessages')) {
-            return message.channel.send('عذراً، هذا الأمر مخصص للإدارة فقط.');
+            return; // تجاهل الأمر تماماً إذا لم يكن إدارياً دون إرسال رسائل
         }
 
         const nominationChannel = client.channels.cache.get(NOMINATION_CHANNEL_ID);
         const resultChannel = client.channels.cache.get(RESULT_CHANNEL_ID);
 
         if (!nominationChannel || !resultChannel) {
-            return message.channel.send('خطأ: لم يتم العثور على الغرف المحددة في الكود.');
+            console.error('خطأ: لم يتم العثور على الغرف المحددة في الكود.');
+            return;
         }
-
-        // استبدال message.reply بـ channel.send لتجنب كراش التزامن كلياً
-        const statusMessage = await message.channel.send('⏳ جاري سحب السجل بالكامل (قد يستغرق بعض الوقت بسبب حجم البيانات الضخم)، يرجى الانتظار...');
 
         try {
             const nominationCounts = {};
@@ -52,6 +49,7 @@ client.on('messageCreate', async (message) => {
             
             let lastAdminWhoAnnounced = null; 
 
+            // حلقة تكرارية صامتة بالكامل لسحب كل البيانات
             do {
                 const options = { limit: 100 };
                 if (lastMessageId) options.before = lastMessageId;
@@ -91,9 +89,7 @@ client.on('messageCreate', async (message) => {
                     });
                 });
 
-                if (totalFetched % 2000 === 0) {
-                    await statusMessage.edit(`⏳ جاري الفرز... تم فحص **${totalFetched}** رسالة حتى الآن.`);
-                }
+                // تم حذف سطر إرسال وتعديل رسائل التحديث هنا لضمان عدم حدوث الكراش (Unknown Message)
 
             } while (fetchedMessages.size === 100);
 
@@ -101,9 +97,10 @@ client.on('messageCreate', async (message) => {
                 .sort((a, b) => b[1] - a[1]);
 
             if (sortedNominees.length === 0) {
-                return statusMessage.edit('❌ انتهى البحث ولم يتم العثور على أي ترشيحات صالحة بعد الفرز الذكي.');
+                return resultChannel.send('❌ انتهى الفرز الصامت ولم يتم العثور على أي ترشيحات صالحة.');
             }
 
+            // بناء القائمة الموحدة
             const embed = new EmbedBuilder()
                 .setTitle('📊 اللستة النهائية لفرز وتصفية الترشيحات الموحدة')
                 .setDescription(`تم مسح الروم بالكامل وفحص **${totalFetched}** رسالة سابقة بنجاح ونزع منشنات التهنئة الإدارية ("ها هُوَ" وغيرها).`)
@@ -121,12 +118,11 @@ client.on('messageCreate', async (message) => {
 
             embed.addFields({ name: 'الترتيب التنازلي من الأكثر تصويتاً للأقل:', value: descriptionText });
 
+            // إرسال النتيجة فوراً ومباشرة في الروم الثاني
             await resultChannel.send({ embeds: [embed] });
-            await statusMessage.edit(`✅ اكتملت العملية بنجاح! تم فحص **${totalFetched}** رسالة وإرسال اللستة الموحدة في: <#${RESULT_CHANNEL_ID}>`);
 
         } catch (error) {
-            console.error(error);
-            await statusMessage.edit('❌ حدث خطأ أثناء المعالجة أو الفرز الشامل للرسائل.');
+            console.error('حدث خطأ أثناء معالجة الرسائل:', error);
         }
     }
 });
