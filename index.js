@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, MessageFlags } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
@@ -8,28 +8,27 @@ const client = new Client({
     ]
 });
 
-// إعدادات الغرف (استبدل الأرقام بـ IDs الخاصة بك)
+// إعدادات الغرف الخاصة بك (ثابتة ومباشرة)
 const NOMINATION_CHANNEL_ID = '1483164935436374096'; 
-const RESULT_CHANNEL_ID = '1519325101479297176'; 
+const RESULT_CHANNEL_ID = '1519325101479297176';     
 
 // الكلمات المفتاحية لرسائل التهنئة والإعلان الإدارية
 const EXCLUDE_KEYWORDS = ['ها هو', 'مبروك', 'فاز', 'الفائز', 'تهنئة'];
 const MAX_LETTER_LIMIT = 70; 
 
-// 1. تسجيل أمر السلاش
-client.once('ready', async () => {
+// استخدام clientReady لتفادي الـ Warning الخاص بـ ديسكورد
+client.once('clientReady', async () => {
     console.log(`تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
 
     const commands = [
         new SlashCommandBuilder()
             .setName('sort')
-            .setDescription('فرز وسحب كافة الترشيحات وإرسالها للروم الثاني فوراً')
+            .setDescription('سحب كافة الترشيحات التاريخية ونقلها لشات النتائج فوراً')
     ];
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
     try {
-        console.log('جاري تسجيل أمر السلاش (/sort)...');
         await rest.put(
             Routes.applicationCommands(client.user.id),
             { body: commands }
@@ -40,7 +39,6 @@ client.once('ready', async () => {
     }
 });
 
-// 2. استقبال وتشغيل أمر السلاش
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -53,20 +51,20 @@ client.on('interactionCreate', async (interaction) => {
         const resultChannel = client.channels.cache.get(RESULT_CHANNEL_ID);
 
         if (!nominationChannel || !resultChannel) {
-            return interaction.reply({ content: 'خطأ: لم يتم العثور على الغرف المحددة في الكود.', flags: [MessageFlags.Ephemeral] });
+            return interaction.reply({ content: 'خطأ: لم يتم العثور على الغرف المحددة.', flags: [MessageFlags.Ephemeral] });
         }
 
-        // استخدام النظام الجديد للإخفاء تجنباً للتنبيه في اللوق
-        await interaction.reply({ content: '🚀 جاري الفرز السريع والصامت والرفع للروم الثاني...', flags: [MessageFlags.Ephemeral] });
+        // رد مخفي فوري للإداري يوضح بدء العملية
+        await interaction.reply({ content: '🚀 جاري سحب الروم كاملاً بالخلفية ونقل النتائج رسائل نصية طبيعية...', flags: [MessageFlags.Ephemeral] });
 
         try {
             const nominationCounts = {};
             let lastMessageId = null;
-            let totalFetched = 0;
             let fetchedMessages;
             let lastAdminWhoAnnounced = null;
+            let totalFetched = 0;
 
-            // سحب فائق السرعة
+            // 1. حلقة تكرارية تسحب الروم كاملاً مهما بلغ عدد الرسائل
             do {
                 const options = { limit: 100 };
                 if (lastMessageId) options.before = lastMessageId;
@@ -76,20 +74,22 @@ client.on('interactionCreate', async (interaction) => {
 
                 totalFetched += fetchedMessages.size;
                 lastMessageId = fetchedMessages.last().id;
-
                 const messagesArray = Array.from(fetchedMessages.values()).reverse();
 
+                // 2. الفرز الذكي واستبعاد التهنئة ومنشن الفائز المباشر يليها
                 for (const msg of messagesArray) {
                     if (msg.author.bot) continue;
 
                     const contentText = msg.content.toLowerCase();
                     const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(k => contentText.includes(k));
 
+                    // تخطي رسائل التهنئة (تبدأ بها هو، مبروك، أو رسالة طويلة)
                     if (contentText.length > MAX_LETTER_LIMIT || hasExcludeKeyword) {
                         lastAdminWhoAnnounced = msg.author.id;
                         continue;
                     }
 
+                    // تخطي منشن الفائز الذي يرسله نفس الإداري بعد التهنئة مباشرة
                     if (lastAdminWhoAnnounced && msg.author.id === lastAdminWhoAnnounced && msg.mentions.users.size > 0) {
                         lastAdminWhoAnnounced = null;
                         continue;
@@ -99,6 +99,7 @@ client.on('interactionCreate', async (interaction) => {
                         lastAdminWhoAnnounced = null;
                     }
 
+                    // احتساب الترشيحات الحقيقية المتبقية
                     msg.mentions.users.forEach(user => {
                         if (!user.bot) {
                             nominationCounts[user.id] = (nominationCounts[user.id] || 0) + 1;
@@ -108,46 +109,37 @@ client.on('interactionCreate', async (interaction) => {
 
             } while (fetchedMessages.size === 100);
 
+            // ترتيب النتيجة تنازلياً من الأعلى تصويتاً للأقل
             const sortedNominees = Object.entries(nominationCounts)
                 .sort((a, b) => b[1] - a[1]);
 
             if (sortedNominees.length === 0) {
-                return resultChannel.send('❌ انتهى الفرز ولم يتم العثور على ترشيحات صالحة.');
+                return resultChannel.send('❌ انتهى سحب الروم ولم يتم العثور على ترشيحات صالحة بعد التصفية.');
             }
 
-            // بناء اللستة المقاومة للمجتمعات الكبيرة
-            const embed = new EmbedBuilder()
-                .setTitle('📊 اللستة النهائية لفرز الترشيحات الموحدة')
-                .setDescription(`تم فحص **${totalFetched}** رسالة بنجاح ونزع منشنات التهنئة الإدارية تلقائياً.`)
-                .setColor('#2efc03')
-                .setTimestamp();
+            // 3. بناء اللستة وإرسالها رسائل نصية طبيعية بالكامل
+            let currentMessageText = `📋 **اللستة النهائية والكاملة للترشيحات الموحدة (تم فحص ${totalFetched} رسالة بالتاريخ):**\n\n`;
 
-            let currentFieldText = '';
-            let fieldCount = 1;
-
-            sortedNominees.forEach(([userId, count], index) => {
+            for (let index = 0; index < sortedNominees.length; index++) {
+                const [userId, count] = sortedNominees[index];
                 const line = `**#${index + 1}** | <@${userId}> ➔ **${count}** صوت\n`;
-                
-                // إذا أضاف السطر الحالي وتخطى الحقل 950 حرفاً (لحمايته من حد الـ 1024)
-                if ((currentFieldText + line).length > 950) {
-                    embed.addFields({ name: `قائمة الترتيب - الجزء ${fieldCount}`, value: currentFieldText });
-                    currentFieldText = line; // تفريغ النص للبدء بحقل جديد
-                    fieldCount++;
-                } else {
-                    currentFieldText += line;
-                }
-            });
 
-            // إضافة آخر نص متبقي في الحلقة التكرارية
-            if (currentFieldText.length > 0) {
-                embed.addFields({ name: `قائمة الترتيب - الجزء ${fieldCount}`, value: currentFieldText });
+                // ديسكورد يسمح بـ 2000 حرف كحد أقصى للرسالة النصية العادية، نقوم بالتقسيم عند 1800 حرف تلقائياً لمنع أي مشكلة
+                if ((currentMessageText + line).length > 1800) {
+                    await resultChannel.send({ content: currentMessageText });
+                    currentMessageText = line; // بدء رسالة نصية ثانية للباقين
+                } else {
+                    currentMessageText += line;
+                }
             }
 
-            // إرسال النتيجة في الروم الثاني فوراً
-            await resultChannel.send({ embeds: [embed] });
+            // إرسال الجزء المتبقي والأخير من النص
+            if (currentMessageText.length > 0) {
+                await resultChannel.send({ content: currentMessageText });
+            }
 
         } catch (error) {
-            console.error('حدث خطأ أثناء الفرز السريع:', error);
+            console.error('حدث خطأ أثناء المعالجة الشاملة للروم:', error);
         }
     }
 });
