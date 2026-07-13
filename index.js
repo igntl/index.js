@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, MessageFlags } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
@@ -16,7 +16,7 @@ const RESULT_CHANNEL_ID = '1519325101479297176';
 const EXCLUDE_KEYWORDS = ['ها هو', 'مبروك', 'فاز', 'الفائز', 'تهنئة'];
 const MAX_LETTER_LIMIT = 70; 
 
-// 1. تسجيل أمر السلاش لدى ديسكورد فور تشغيل البوت
+// 1. تسجيل أمر السلاش
 client.once('ready', async () => {
     console.log(`تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
 
@@ -45,20 +45,19 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'sort') {
-        // التحقق من الصلاحية
         if (!interaction.member.permissions.has('ManageMessages')) {
-            return interaction.reply({ content: 'عذراً، هذا الأمر مخصص للإدارة فقط.', ephemeral: true });
+            return interaction.reply({ content: 'عذراً، هذا الأمر مخصص للإدارة فقط.', flags: [MessageFlags.Ephemeral] });
         }
 
         const nominationChannel = client.channels.cache.get(NOMINATION_CHANNEL_ID);
         const resultChannel = client.channels.cache.get(RESULT_CHANNEL_ID);
 
         if (!nominationChannel || !resultChannel) {
-            return interaction.reply({ content: 'خطأ: لم يتم العثور على الغرف المحددة في الكود.', ephemeral: true });
+            return interaction.reply({ content: 'خطأ: لم يتم العثور على الغرف المحددة في الكود.', flags: [MessageFlags.Ephemeral] });
         }
 
-        // الرد الفوري لإعلامك أن البوت بدأ العمل طائرًا (الرد مخفي لا يراه غيرك)
-        await interaction.reply({ content: '🚀 جاري الفرز السريع والصامت والرفع للروم الثاني...', ephemeral: true });
+        // استخدام النظام الجديد للإخفاء تجنباً للتنبيه في اللوق
+        await interaction.reply({ content: '🚀 جاري الفرز السريع والصامت والرفع للروم الثاني...', flags: [MessageFlags.Ephemeral] });
 
         try {
             const nominationCounts = {};
@@ -67,7 +66,7 @@ client.on('interactionCreate', async (interaction) => {
             let fetchedMessages;
             let lastAdminWhoAnnounced = null;
 
-            // سحب فائق السرعة متتالي
+            // سحب فائق السرعة
             do {
                 const options = { limit: 100 };
                 if (lastMessageId) options.before = lastMessageId;
@@ -78,7 +77,6 @@ client.on('interactionCreate', async (interaction) => {
                 totalFetched += fetchedMessages.size;
                 lastMessageId = fetchedMessages.last().id;
 
-                // تحويل سريع للمصفوفة والفرز الذكي
                 const messagesArray = Array.from(fetchedMessages.values()).reverse();
 
                 for (const msg of messagesArray) {
@@ -87,13 +85,11 @@ client.on('interactionCreate', async (interaction) => {
                     const contentText = msg.content.toLowerCase();
                     const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(k => contentText.includes(k));
 
-                    // إذا كانت تهنئة أو رسالة طويلة نسجل الإداري ونتخطاها
                     if (contentText.length > MAX_LETTER_LIMIT || hasExcludeKeyword) {
                         lastAdminWhoAnnounced = msg.author.id;
                         continue;
                     }
 
-                    // تخطي منشن الفائز التابع للإداري
                     if (lastAdminWhoAnnounced && msg.author.id === lastAdminWhoAnnounced && msg.mentions.users.size > 0) {
                         lastAdminWhoAnnounced = null;
                         continue;
@@ -103,7 +99,6 @@ client.on('interactionCreate', async (interaction) => {
                         lastAdminWhoAnnounced = null;
                     }
 
-                    // إضافة الأصوات
                     msg.mentions.users.forEach(user => {
                         if (!user.bot) {
                             nominationCounts[user.id] = (nominationCounts[user.id] || 0) + 1;
@@ -113,7 +108,6 @@ client.on('interactionCreate', async (interaction) => {
 
             } while (fetchedMessages.size === 100);
 
-            // ترتيب تنازلي
             const sortedNominees = Object.entries(nominationCounts)
                 .sort((a, b) => b[1] - a[1]);
 
@@ -121,23 +115,33 @@ client.on('interactionCreate', async (interaction) => {
                 return resultChannel.send('❌ انتهى الفرز ولم يتم العثور على ترشيحات صالحة.');
             }
 
-            // بناء اللستة الموحدة
+            // بناء اللستة المقاومة للمجتمعات الكبيرة
             const embed = new EmbedBuilder()
-                .setTitle('📊 اللستة النهائية لفرز الترشيحات')
+                .setTitle('📊 اللستة النهائية لفرز الترشيحات الموحدة')
                 .setDescription(`تم فحص **${totalFetched}** رسالة بنجاح ونزع منشنات التهنئة الإدارية تلقائياً.`)
                 .setColor('#2efc03')
                 .setTimestamp();
 
-            let descriptionText = '';
+            let currentFieldText = '';
+            let fieldCount = 1;
+
             sortedNominees.forEach(([userId, count], index) => {
-                descriptionText += `**#${index + 1}** | <@${userId}> ➔ **${count}** صوت\n`;
+                const line = `**#${index + 1}** | <@${userId}> ➔ **${count}** صوت\n`;
+                
+                // إذا أضاف السطر الحالي وتخطى الحقل 950 حرفاً (لحمايته من حد الـ 1024)
+                if ((currentFieldText + line).length > 950) {
+                    embed.addFields({ name: `قائمة الترتيب - الجزء ${fieldCount}`, value: currentFieldText });
+                    currentFieldText = line; // تفريغ النص للبدء بحقل جديد
+                    fieldCount++;
+                } else {
+                    currentFieldText += line;
+                }
             });
 
-            if (descriptionText.length > 4000) {
-                descriptionText = descriptionText.substring(0, 3950) + '\n... وتستمر القائمة الباقية';
+            // إضافة آخر نص متبقي في الحلقة التكرارية
+            if (currentFieldText.length > 0) {
+                embed.addFields({ name: `قائمة الترتيب - الجزء ${fieldCount}`, value: currentFieldText });
             }
-
-            embed.addFields({ name: 'الترتيب التنازلي من الأكثر للأقل تصويتاً:', value: descriptionText });
 
             // إرسال النتيجة في الروم الثاني فوراً
             await resultChannel.send({ embeds: [embed] });
