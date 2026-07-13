@@ -10,8 +10,8 @@ const client = new Client({
 });
 
 // إعدادات الغرف (استبدل الأرقام بـ IDs الخاصة بك)
-const NOMINATION_CHANNEL_ID = 'ايدي_روم_الترشيحات'; 
-const RESULT_CHANNEL_ID = 'ايدي_روم_النتيجة_واللستة'; 
+const NOMINATION_CHANNEL_ID = '1483164935436374096'; 
+const RESULT_CHANNEL_ID = '1519325101479297176'; 
 const PREFIX = '!'; // أمر تشغيل البوت
 
 // الكلمات المفتاحية لرسائل التهنئة والإعلان الإدارية
