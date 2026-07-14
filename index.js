@@ -5,11 +5,11 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent // تأكد من تفعيل هذا الخيار في الـ Developer Portal للبوت
+        GatewayIntentBits.MessageContent 
     ]
 });
 
-// إعدادات الغرف الخاصة بك ثابتة ومباشرة
+// إعدادات الغرف الخاصة بك
 const NOMINATION_CHANNEL_ID = '1483164935436374096'; 
 const RESULT_CHANNEL_ID = '1519325101479297176';     
 
@@ -23,7 +23,7 @@ client.once('clientReady', async () => {
     const commands = [
         new SlashCommandBuilder()
             .setName('sort')
-            .setDescription('سحب كافة الترشيحات التاريخية بالكامل وبأعلى دقة دون ليميت')
+            .setDescription('سحب كافة الترشيحات التاريخية بالكامل مع تمييز وقت التهنئة')
     ];
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -54,8 +54,7 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ content: 'خطأ: لم يتم العثور على الغرف المحددة.', flags: [MessageFlags.Ephemeral] });
         }
 
-        // رد مخفي فوري للإداري
-        await interaction.reply({ content: '🚀 بدأ السحب الكامل والعميق للروم (حتى لو تجاوز 10 آلاف رسالة)، انتظر ثوانٍ وستجد النتيجة طارت بالروم الآخر...', flags: [MessageFlags.Ephemeral] });
+        await interaction.reply({ content: '🚀 جاري جلب الأرشيف وتمييز أوقات التهاني لحساب الأصوات بدقة متناهية...', flags: [MessageFlags.Ephemeral] });
 
         try {
             const nominationCounts = {};
@@ -63,7 +62,7 @@ client.on('interactionCreate', async (interaction) => {
             let lastMessageId = null;
             let fetchedMessages;
 
-            // حماية ضد الـ Rate Limit وتجنب الوقوع في فخ الحد الأقصى للجلب
+            // 1. جلب الأرشيف كاملاً مهما كان ضخماً
             do {
                 const options = { limit: 100 };
                 if (lastMessageId) options.before = lastMessageId;
@@ -74,55 +73,59 @@ client.on('interactionCreate', async (interaction) => {
                 allMessages.push(...Array.from(fetchedMessages.values()));
                 lastMessageId = fetchedMessages.last().id;
 
-                // تأخير بسيط جداً (50 ملي ثانية) لتجنب حظر ديسكورد المؤقت أثناء سحب آلاف الرسائل متتالية
                 await new Promise(resolve => setTimeout(resolve, 50));
 
             } while (fetchedMessages.size === 100);
 
-            // ترتيب الرسائل من الأقدم للأحدث تصاعدياً ليمشي الفرز زمنياً وبدقة
+            // ترتيب الرسائل من الأقدم للأحدث زمنياً
             allMessages.reverse();
 
-            let lastAdminWhoAnnounced = null;
+            let lastCongratAuthorId = null;
+            let lastCongratTime = 0;
 
+            // 2. الفرز الذكي المعتمد على الوقت
             for (const msg of allMessages) {
                 if (msg.author.bot) continue;
 
                 const contentText = msg.content.toLowerCase().trim();
                 const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(k => contentText.includes(k));
+                const isCongratMessage = contentText.length > MAX_LETTER_LIMIT || hasExcludeKeyword;
 
-                // 1. استبعاد رسائل التهنئة كلياً
-                if (contentText.length > MAX_LETTER_LIMIT || hasExcludeKeyword) {
-                    lastAdminWhoAnnounced = msg.author.id;
-                    continue; 
+                // أ) إذا كانت الرسالة عبارة عن تهنئة
+                if (isCongratMessage) {
+                    lastCongratAuthorId = msg.author.id;
+                    lastCongratTime = msg.createdTimestamp; // حفظ وقت إرسال التهنئة بالملي ثانية
+                    continue; // استبعاد رسالة التهنئة نفسها بالكامل من الحساب
                 }
 
-                // 2. استخدام المنشنات الرسمية والمسجلة بالرسالة من ديسكورد لضمان دقة 100%
+                // جلب المنشنات للأعضاء
                 let userMentions = Array.from(msg.mentions.users.values()).filter(u => !u.bot);
+                if (userMentions.length === 0) continue;
 
-                if (userMentions.length === 0) continue; // تخطي الرسائل التي لا تحتوي على منشنات صالحة
+                // ب) تمييز الوقت: إذا كانت الرسالة تحتوي على منشن وجاءت مباشرة بعد التهنئة بفارق أقل من 60 ثانية (60000 ملي ثانية) ومن نفس الإداري
+                const timeDifference = msg.createdTimestamp - lastCongratTime;
 
-                // 3. استبعاد أول منشن (الفائز) فقط إذا جاءت الرسالة مباشرة بعد تهنئة نفس الإداري
-                if (lastAdminWhoAnnounced && msg.author.id === lastAdminWhoAnnounced) {
-                    userMentions.shift(); // حذف أول منشن بالرسالة
-                    lastAdminWhoAnnounced = null; // تصفير حالة الترقب للإداري فوراً
+                if (lastCongratAuthorId && msg.author.id === lastCongratAuthorId && timeDifference < 60000) {
+                    userMentions.shift(); // حذف أول منشن فقط (منشن الفائز المستبعد)
+                    lastCongratAuthorId = null; // إعادة تعيين لعدم حذف أي منشنات أخرى لاحقاً
                 }
 
-                // 4. احتساب الأصوات بدقة لكل منشن متبقي بالرسالة
+                // ج) احتساب باقي المنشنات بشكل طبيعي جداً وسليم
                 userMentions.forEach(user => {
                     nominationCounts[user.id] = (nominationCounts[user.id] || 0) + 1;
                 });
             }
 
-            // ترتيب تنازلي للأصوات
+            // ترتيب النتيجة تنازلياً
             const sortedNominees = Object.entries(nominationCounts)
                 .sort((a, b) => b[1] - a[1]);
 
             if (sortedNominees.length === 0) {
-                return resultChannel.send('❌ انتهى سحب الروم بالكامل ولم يتم العثور على أي ترشيحات صالحة بعد التصفية.');
+                return resultChannel.send('❌ انتهى سحب الروم ولم يتم العثور على أي منشنات صالحة.');
             }
 
-            // 5. بناء الرسائل وإرسالها كنصوص طبيعية دون ليميت
-            let currentMessageText = `📋 **اللستة النهائية والكاملة للترشيحات الموحدة (تم سحب وفحص ${allMessages.length} رسالة بالتاريخ بدقة متناهية 100%):**\n\n`;
+            // 3. طباعة اللستة النهائية رسائل نصية عادية
+            let currentMessageText = `📋 **اللستة النهائية والكاملة للترشيحات الموحدة (تم تصفية رسائل التهنئة ومنشن الفائز المباشر بدقة زمنية عالية):**\n\n`;
 
             for (let index = 0; index < sortedNominees.length; index++) {
                 const [userId, count] = sortedNominees[index];
