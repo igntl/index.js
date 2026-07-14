@@ -16,7 +16,6 @@ const RESULT_CHANNEL_ID = '1519325101479297176';
 const EXCLUDE_KEYWORDS = ['ها هو', 'مبروك', 'فاز', 'الفائز', 'تهنئة'];
 const MAX_LETTER_LIMIT = 70; 
 
-// استخدام clientReady لتفادي الـ Warning الخاص بـ ديسكورد
 client.once('clientReady', async () => {
     console.log(`تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
 
@@ -54,8 +53,7 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ content: 'خطأ: لم يتم العثور على الغرف المحددة.', flags: [MessageFlags.Ephemeral] });
         }
 
-        // رد مخفي فوري للإداري يوضح بدء العملية
-        await interaction.reply({ content: '🚀 جاري سحب الروم كاملاً بالخلفية ونقل النتائج رسائل نصية طبيعية...', flags: [MessageFlags.Ephemeral] });
+        await interaction.reply({ content: '🚀 جاري جلب كافة الأصوات بدقة متناهية (كل المنشنات الفردية والمتعددة)...', flags: [MessageFlags.Ephemeral] });
 
         try {
             const nominationCounts = {};
@@ -64,7 +62,7 @@ client.on('interactionCreate', async (interaction) => {
             let lastAdminWhoAnnounced = null;
             let totalFetched = 0;
 
-            // 1. حلقة تكرارية تسحب الروم كاملاً مهما بلغ عدد الرسائل
+            // 1. حلقة تكرارية لسحب كامل سجل الروم
             do {
                 const options = { limit: 100 };
                 if (lastMessageId) options.before = lastMessageId;
@@ -76,64 +74,62 @@ client.on('interactionCreate', async (interaction) => {
                 lastMessageId = fetchedMessages.last().id;
                 const messagesArray = Array.from(fetchedMessages.values()).reverse();
 
-                // 2. الفرز الذكي واستبعاد التهنئة ومنشن الفائز المباشر يليها
+                // 2. الفرز الذكي والتفصيلي لكل رسالة
                 for (const msg of messagesArray) {
                     if (msg.author.bot) continue;
 
                     const contentText = msg.content.toLowerCase();
                     const hasExcludeKeyword = EXCLUDE_KEYWORDS.some(k => contentText.includes(k));
 
-                    // تخطي رسائل التهنئة (تبدأ بها هو، مبروك، أو رسالة طويلة)
+                    // الفحص الأول: هل الرسالة تهنئة أو إعلان؟
                     if (contentText.length > MAX_LETTER_LIMIT || hasExcludeKeyword) {
-                        lastAdminWhoAnnounced = msg.author.id;
-                        continue;
+                        lastAdminWhoAnnounced = msg.author.id; // سجلنا الإداري الذي أعلن
+                        continue; // تخطي رسالة التهنئة بالكامل
                     }
 
-                    // تخطي منشن الفائز الذي يرسله نفس الإداري بعد التهنئة مباشرة
-                    if (lastAdminWhoAnnounced && msg.author.id === lastAdminWhoAnnounced && msg.mentions.users.size > 0) {
-                        lastAdminWhoAnnounced = null;
-                        continue;
+                    // الحصول على جميع المنشنات الفريدة داخل الرسالة كقائمة (Array)
+                    const mentionsList = Array.from(msg.mentions.users.values()).filter(user => !user.bot);
+
+                    if (mentionsList.length === 0) continue; // رسالة بدون منشنات
+
+                    // الفحص الثاني: استبعاد المنشن الإداري المباشر الأول (منشن الفائز) فقط
+                    if (lastAdminWhoAnnounced && msg.author.id === lastAdminWhoAnnounced) {
+                        // نقوم بحذف المنشن الأول فقط من القائمة (منشن الفائز المستبعد)
+                        mentionsList.shift(); 
+                        lastAdminWhoAnnounced = null; // إنهاء حالة الترقب للإداري فوراً بعد فلترة الفائز
                     }
 
-                    if (lastAdminWhoAnnounced && msg.author.id !== lastAdminWhoAnnounced) {
-                        lastAdminWhoAnnounced = null;
-                    }
-
-                    // احتساب الترشيحات الحقيقية المتبقية
-                    msg.mentions.users.forEach(user => {
-                        if (!user.bot) {
-                            nominationCounts[user.id] = (nominationCounts[user.id] || 0) + 1;
-                        }
+                    // احتساب بقية المنشنات في الرسالة بدقة (سواء كانت منشن واحد، 3، أو أكثر تحت بعض)
+                    mentionsList.forEach(user => {
+                        nominationCounts[user.id] = (nominationCounts[user.id] || 0) + 1;
                     });
                 }
 
             } while (fetchedMessages.size === 100);
 
-            // ترتيب النتيجة تنازلياً من الأعلى تصويتاً للأقل
+            // ترتيب تنازلي للأصوات
             const sortedNominees = Object.entries(nominationCounts)
                 .sort((a, b) => b[1] - a[1]);
 
             if (sortedNominees.length === 0) {
-                return resultChannel.send('❌ انتهى سحب الروم ولم يتم العثور على ترشيحات صالحة بعد التصفية.');
+                return resultChannel.send('❌ انتهى سحب الروم ولم يتم العثور على ترشيحات صالحة.');
             }
 
-            // 3. بناء اللستة وإرسالها رسائل نصية طبيعية بالكامل
-            let currentMessageText = `📋 **اللستة النهائية والكاملة للترشيحات الموحدة (تم فحص ${totalFetched} رسالة بالتاريخ):**\n\n`;
+            // 3. كتابة النتيجة وإرسالها كرسائل نصية طبيعية
+            let currentMessageText = `📋 **اللستة النهائية الشاملة للترشيحات الموحدة (تم فحص ${totalFetched} رسالة بالتاريخ بدقة للأصوات الفردية والمتعددة):**\n\n`;
 
             for (let index = 0; index < sortedNominees.length; index++) {
                 const [userId, count] = sortedNominees[index];
                 const line = `**#${index + 1}** | <@${userId}> ➔ **${count}** صوت\n`;
 
-                // ديسكورد يسمح بـ 2000 حرف كحد أقصى للرسالة النصية العادية، نقوم بالتقسيم عند 1800 حرف تلقائياً لمنع أي مشكلة
                 if ((currentMessageText + line).length > 1800) {
                     await resultChannel.send({ content: currentMessageText });
-                    currentMessageText = line; // بدء رسالة نصية ثانية للباقين
+                    currentMessageText = line; 
                 } else {
                     currentMessageText += line;
                 }
             }
 
-            // إرسال الجزء المتبقي والأخير من النص
             if (currentMessageText.length > 0) {
                 await resultChannel.send({ content: currentMessageText });
             }
